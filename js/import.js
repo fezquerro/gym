@@ -9,6 +9,11 @@ const COLUMNS = {
   reps: ['reps', 'repeticiones', 'repetitions'],
   rpe: ['rpe', '@'],
   bodyweight: ['bodyweight', 'body weight', 'bw', 'peso corporal'],
+  top: ['top set', 'top'],
+  failed: ['failed', 'fallo', 'fallida'],
+  target: ['planned', 'target', 'objetivo'],
+  routine: ['routine', 'rutina'],
+  notes: ['notes', 'notas'],
 };
 
 // Excel saves CSV in the Windows code page unless told otherwise, so fall back to it.
@@ -68,9 +73,10 @@ function parseDate(text) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-// Returns { lifts: [{ exercise, date, weight, reps, rpe, bodyweight }], skipped } or throws when the
-// file has no usable header row.
-export function parseLifts(text) {
+// Splits a CSV file into its non-empty data rows plus a `read(row)` that gives one row's
+// values by column name, with the basic checks done. Throws when the file has no usable
+// header row.
+function readTable(text) {
   const clean = text.replace(/^﻿/, '');
   const header = clean.split('\n', 1)[0];
   const sep = [';', '\t', ','].reduce((best, s) => (header.split(s).length > header.split(best).length ? s : best));
@@ -81,29 +87,85 @@ export function parseLifts(text) {
   const column = (key, taken = -1) =>
     names.findIndex((name, i) => i !== taken && COLUMNS[key].some(alias => name.startsWith(alias)));
   const bodyweightAt = column('bodyweight');
-  const at = {
-    date: column('date'), exercise: column('exercise'), weight: column('weight', bodyweightAt),
-    reps: column('reps'), rpe: column('rpe'), bodyweight: bodyweightAt,
-  };
+  const at = Object.fromEntries(Object.keys(COLUMNS).map(key =>
+    [key, key === 'weight' ? column(key, bodyweightAt) : column(key)]));
   if (at.date < 0 || at.exercise < 0 || at.weight < 0 || at.reps < 0) {
     throw new Error('The file needs Date, Exercise, Weight and Reps columns');
   }
 
+  const cell = (row, key) => (at[key] < 0 ? '' : (row[at[key]] ?? '').trim());
+  const yes = text => /^(yes|y|si|sí|true|x|1)$/i.test(text);
+  const read = row => {
+    const rpe = parseNum(cell(row, 'rpe'));
+    const failed = yes(cell(row, 'failed'));
+    return {
+      date: parseDate(cell(row, 'date')),
+      exercise: cell(row, 'exercise'),
+      weight: parseNum(cell(row, 'weight')),
+      reps: Math.round(parseNum(cell(row, 'reps')) ?? 0),
+      rpe: validRpe(rpe) ? rpe : null,
+      bodyweight: parseNum(cell(row, 'bodyweight')) || null,
+      top: yes(cell(row, 'top')),
+      failed,
+      target: failed ? Math.round(parseNum(cell(row, 'target')) ?? 0) || null : null,
+      routine: cell(row, 'routine'),
+      notes: cell(row, 'notes'),
+    };
+  };
+  // A failed set may have 0 reps (a missed attempt); any other set needs at least one.
+  const valid = lift => lift.date && lift.exercise && lift.weight != null && (lift.reps >= 1 || lift.failed);
+  return { rows: rows.filter(row => row.some(value => value.trim())), read, valid };
+}
+
+// Returns { lifts: [{ exercise, date, weight, reps, rpe, bodyweight }], skipped } or throws when the
+// file has no usable header row.
+export function parseLifts(text) {
+  const { rows, read, valid } = readTable(text);
   const lifts = [];
   let skipped = 0;
   for (const row of rows) {
-    if (row.every(cell => !cell.trim())) continue;
-    const date = parseDate(row[at.date] ?? '');
-    const exercise = (row[at.exercise] ?? '').trim();
-    const weight = parseNum(row[at.weight] ?? '');
-    const reps = Math.round(parseNum(row[at.reps] ?? '') ?? 0);
-    const rpe = at.rpe < 0 ? null : parseNum(row[at.rpe] ?? '');
-    if (!date || !exercise || weight == null || reps < 1) {
+    const lift = read(row);
+    // Records are lifts that were made, so missed attempts are left out here.
+    if (!valid(lift) || lift.reps < 1) {
       skipped += 1;
       continue;
     }
-    const bodyweight = at.bodyweight < 0 ? null : parseNum(row[at.bodyweight] ?? '');
-    lifts.push({ exercise, date, weight, reps, rpe: validRpe(rpe) ? rpe : null, bodyweight: bodyweight || null });
+    const { exercise, date, weight, reps, rpe, bodyweight } = lift;
+    lifts.push({ exercise, date, weight, reps, rpe, bodyweight });
   }
   return { lifts, skipped };
+}
+
+// Reads whole workouts: every row is one set, and the rows of a date make up that day's
+// workout, with exercises and sets in file order. Same columns as the app's own CSV export.
+// Returns { workouts: [{ date, bodyweight, routine, notes, entries: [{ exercise, sets }] }], skipped }.
+export function parseWorkouts(text) {
+  const { rows, read, valid } = readTable(text);
+  const days = new Map();
+  let skipped = 0;
+  for (const row of rows) {
+    const lift = read(row);
+    // Records added by hand also appear in the export; they are not workout sets.
+    if (lift.notes === 'Record added by hand') continue;
+    if (!valid(lift)) {
+      skipped += 1;
+      continue;
+    }
+    const day = days.get(lift.date) ?? { date: lift.date, bodyweight: null, routine: '', notes: new Set(), entries: [] };
+    day.bodyweight ??= lift.bodyweight;
+    day.routine ||= lift.routine;
+    if (lift.notes) day.notes.add(lift.notes);
+    let entry = day.entries.find(e => e.exercise.toLowerCase() === lift.exercise.toLowerCase());
+    if (!entry) {
+      entry = { exercise: lift.exercise, sets: [] };
+      day.entries.push(entry);
+    }
+    const { weight, reps, rpe, top, failed, target } = lift;
+    entry.sets.push({ weight, reps, rpe, top, failed, target });
+    days.set(lift.date, day);
+  }
+  const workouts = [...days.values()]
+    .map(day => ({ ...day, notes: [...day.notes].join(' · ') }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return { workouts, skipped };
 }

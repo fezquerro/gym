@@ -172,6 +172,7 @@ function estimateLine(main, set, value, bodyweight) {
   if (set.reps == null || (set.weight == null && main !== 'pullup')) {
     return ['Fill in the weight and reps to see the estimated 1RM.'];
   }
+  if (set.reps === 0) return ['Missed attempt, so no estimated 1RM.'];
   if (main !== 'pullup') return ['Estimated 1RM ', h('strong', null, kg(value))];
   if (bodyweight == null) return ['Enter your bodyweight below to see the estimated 1RM.'];
   return [
@@ -191,8 +192,11 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
     value: value == null ? '' : fmtNum(value),
     placeholder: placeholder == null ? '' : fmtNum(placeholder),
   });
+  // Reps to suggest from a set: what was done, or what was planned if that set was missed.
+  const suggestedReps = from => from?.reps || from?.target || null;
+
   const weight = field('weight in kg', 'decimal', set.weight, expected?.weight);
-  const reps = field('reps', 'numeric', set.reps, expected?.reps);
+  const reps = field('reps', 'numeric', set.reps, suggestedReps(expected));
   const rpe = field('effort (RPE, 5 to 10)', 'decimal', set.rpe, null);
   const check = h('button', { class: 'check', 'aria-label': `Set ${i + 1} done` }, '✓');
 
@@ -274,12 +278,20 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
   });
 
   // Entering reps completes the set, taking the suggested weight if none was typed.
+  // 0 reps is a missed attempt: a failed set that keeps how many reps were planned.
   reps.addEventListener('input', () => {
     const n = parseNum(reps.value);
-    set.reps = n ? Math.round(n) : null;
+    set.reps = n == null ? null : Math.round(n);
     set.done = set.reps != null;
     if (!set.done) set.failed = false;
     const from = hint(i);
+    if (set.reps === 0) {
+      set.failed = true;
+      set.target ??= suggestedReps(from) ?? 1;
+    } else if (set.failed && set.target != null && set.reps >= set.target) {
+      // Reaching the planned reps means the set was not failed after all.
+      set.failed = false;
+    }
     if (set.done && set.weight == null && from?.weight != null) {
       set.weight = from.weight;
       weight.value = fmtNum(set.weight);
@@ -289,18 +301,20 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
   });
 
   // The tick cycles: not done -> done (accepting the suggested numbers) -> failed -> not done.
+  // A missed attempt (0 reps) is always failed, so it goes straight back to not done.
   check.addEventListener('click', () => {
     if (set.done && !set.failed) {
       set.failed = true;
-      const planned = hint(i)?.reps;
-      set.target ??= planned > set.reps ? planned : set.reps + 1;
+      // Keep a planned number from before only if it is still more than was done.
+      const planned = suggestedReps(hint(i));
+      if (!(set.target > set.reps)) set.target = planned > set.reps ? planned : set.reps + 1;
     } else if (set.done) {
       set.done = false;
       set.failed = false;
     } else {
       const from = hint(i);
       set.weight ??= from?.weight ?? null;
-      set.reps ??= from?.reps ?? null;
+      set.reps ??= suggestedReps(from);
       if (set.weight != null) weight.value = fmtNum(set.weight);
       if (set.reps == null) {
         reps.focus();
@@ -308,6 +322,7 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
       }
       reps.value = set.reps;
       set.done = true;
+      if (set.reps === 0) set.failed = true;
     }
     paint();
     save();

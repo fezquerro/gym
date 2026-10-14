@@ -1,7 +1,7 @@
 import { barList, lineChart, trendChart } from '../chart.js';
 import { go, refresh } from '../nav.js';
 import {
-  MAIN_LIFTS, addRecord, bodyweights, deleteRecord, estimate1rm, exercise, exerciseName, liftLog,
+  MAIN_LIFTS, addRecord, counts, bodyweights, deleteRecord, estimate1rm, exercise, exerciseName, liftLog,
   records, state, topSet,
 } from '../store.js';
 import { fmtDate, fmtNum, fmtSet, fmtSets, h, isoDate, parseNum, toast, todayISO, validRpe } from '../util.js';
@@ -11,6 +11,12 @@ import { pickExercise } from './picker.js';
 const round1 = n => Math.round(n * 10) / 10;
 const kg = n => `${fmtNum(round1(n))} kg`;
 const day = iso => fmtDate(iso, { weekday: false });
+// Dates in tables are numeric (13/10/25) so the columns fit across a phone screen.
+const tableDay = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`;
+
+// The log without missed attempts (failed sets of 0 reps), which have no weight lifted to
+// chart; days that only had missed attempts drop out.
+const lifted = log => log.map(entry => ({ ...entry, sets: entry.sets.filter(counts) })).filter(entry => entry.sets.length);
 
 // "140 kg × 3 @ 8", or "12 reps" for lifts done without added weight.
 const lift = set =>
@@ -86,7 +92,7 @@ const hiddenLifts = new Set();
 function mainLiftsCard(from) {
   const lifts = MAIN_LIFTS.map((main, i) => {
     const ex = state.exercises.find(e => e.main === main.key);
-    return { main, ex, color: `var(--series-${i + 1})`, log: ex ? liftLog(ex.id) : [] };
+    return { main, ex, color: `var(--series-${i + 1})`, log: ex ? lifted(liftLog(ex.id)) : [] };
   });
 
   // Rep counts that have been logged for any main lift, offered as filters.
@@ -103,7 +109,7 @@ function mainLiftsCard(from) {
           .filter(entry => !pullup || entry.bodyweight != null)
           .map(entry => {
             const top = topSet(entry);
-            return { date: entry.date, value: round1(estimate1rm(ex.id, top, entry.bodyweight)), lifted: fmtSet(top) };
+            return { date: entry.date, value: round1(estimate1rm(ex.id, top, entry.bodyweight)), lifted: fmtSet(top).replace(/ × /g, ' × ') };
           })
       : inRange
           .map(entry => ({ date: entry.date, weights: entry.sets.filter(set => set.reps === repsFilter).map(set => set.weight) }))
@@ -138,10 +144,10 @@ function mainLiftsCard(from) {
     .sort((a, b) => b.point.value - a.point.value || b.point.date.localeCompare(a.point.date))
     .map(({ s, point }) => [
       s.name,
-      `${s.prefix}${fmtNum(point.value)} kg`,
+      `${s.prefix}${fmtNum(point.value)} kg`,
       // With the estimate, also the set it came from: the weight and reps actually lifted.
       repsFilter == null && point.lifted,
-      day(point.date),
+      tableDay(point.date),
     ].filter(cell => cell !== false));
   const headers = repsFilter == null
     ? ['Lift', 'Est. 1RM', 'Lifted', 'Date']
@@ -184,7 +190,7 @@ function bodyweightCard(from) {
     dataTable(['Date', 'Bodyweight', 'Change'], points.map((point, i) => {
       const diff = i ? round1(point.value - points[i - 1].value) : null;
       return [
-        day(point.date),
+        tableDay(point.date),
         kg(point.value),
         diff == null ? '' : diff === 0 ? '0' : `${diff > 0 ? '+' : '−'}${fmtNum(Math.abs(diff))}`,
       ];
@@ -197,7 +203,8 @@ function exerciseDetail(id) {
   const back = () => go('progress');
   const add = h('button', { class: 'btn', onclick: () => go('progress', 'add', { exerciseId: id }) },
     '+ Add a record by hand');
-  const log = liftLog(id);
+  const all = liftLog(id);
+  const log = lifted(all);
   const rec = records(id);
   if (!rec) return page(name, { back }, h('p', { class: 'muted' }, 'No lifts logged yet.'), add);
 
@@ -255,7 +262,7 @@ function exerciseDetail(id) {
             b.entry.date.localeCompare(a.entry.date))
           .map(({ entry, top }) => {
             const value = round1(Math.max(...entry.sets.map(set => estimate1rm(id, set, entry.bodyweight))));
-            return [day(entry.date), top.label + (top.record ? ' ★' : ''), value > 0 ? `${pullup ? '+' : ''}${fmtNum(value)}` : ''];
+            return [tableDay(entry.date), top.label + (top.record ? ' ★' : ''), value > 0 ? `${pullup ? '+' : ''}${fmtNum(value)}` : ''];
           }),
       ),
     ),
@@ -268,7 +275,7 @@ function exerciseDetail(id) {
 
     add,
     h('h2', null, 'History'),
-    [...log].reverse().map(entry =>
+    [...all].reverse().map(entry =>
       h('div', { class: 'card' },
         h('strong', null, fmtDate(entry.date)),
         entry.manual

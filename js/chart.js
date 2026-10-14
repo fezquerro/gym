@@ -76,8 +76,8 @@ export function trendChart(series, { unit = 'kg' } = {}) {
       h('p', { class: 'muted small' }, 'The chart appears once there are two sessions to compare.'));
   }
 
-  const W = 340, H = 180;
-  const box = { left: 36, right: W - 12, top: 12, bottom: H - 24 };
+  const W = 340, H = 250;
+  const box = { left: 42, right: W - 12, top: 12, bottom: H - 26 };
   const ticks = niceTicks(Math.min(...all.map(p => p.value)), Math.max(...all.map(p => p.value)), 4);
   const lo = ticks[0], hi = ticks.at(-1);
   const first = dayNumber(dates[0]);
@@ -96,8 +96,8 @@ export function trendChart(series, { unit = 'kg' } = {}) {
   const plot = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Line chart of ${lines.map(l => l.name).join(', ')}` },
     ...ticks.map(t => svg('line', { class: 'chart-grid', x1: box.left, x2: box.right, y1: y(t), y2: y(t) })),
     ...ticks.map(t => text({ x: box.left - 6, y: y(t) + 3.5, 'text-anchor': 'end' }, fmtNum(t))),
-    text({ x: box.left, y: H - 6 }, fmtDate(dates[0], { weekday: false })),
-    text({ x: box.right, y: H - 6, 'text-anchor': 'end' }, fmtDate(dates.at(-1), { weekday: false })),
+    text({ x: box.left, y: H - 7 }, fmtDate(dates[0], { weekday: false })),
+    text({ x: box.right, y: H - 7, 'text-anchor': 'end' }, fmtDate(dates.at(-1), { weekday: false })),
     cross,
     ...lines.map(l => svg('path', {
       class: 'chart-line',
@@ -146,8 +146,8 @@ export function lineChart(points, { unit = 'kg', even = false } = {}) {
     return h('p', { class: 'muted small' }, 'The chart appears once there are two sessions to compare.');
   }
 
-  const W = 340, H = 170;
-  const box = { left: 36, right: W - 52, top: 30, bottom: H - 24 };
+  const W = 340, H = 240;
+  const box = { left: 42, right: W - 58, top: 30, bottom: H - 26 };
   const ticks = niceTicks(Math.min(...points.map(p => p.value)), Math.max(...points.map(p => p.value)));
   const lo = ticks[0], hi = ticks.at(-1);
   const first = dayNumber(points[0].date);
@@ -166,8 +166,8 @@ export function lineChart(points, { unit = 'kg', even = false } = {}) {
   const plot = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Line chart, latest ${fmtNum(last.value)} ${unit}` },
     ...ticks.map(t => svg('line', { class: 'chart-grid', x1: box.left, x2: box.right, y1: y(t), y2: y(t) })),
     ...ticks.map(t => text({ x: box.left - 6, y: y(t) + 3.5, 'text-anchor': 'end' }, fmtNum(t))),
-    text({ x: box.left, y: H - 6 }, fmtDate(points[0].date, { weekday: false })),
-    text({ x: box.right, y: H - 6, 'text-anchor': 'end' }, fmtDate(last.date, { weekday: false })),
+    text({ x: box.left, y: H - 7 }, fmtDate(points[0].date, { weekday: false })),
+    text({ x: box.right, y: H - 7, 'text-anchor': 'end' }, fmtDate(last.date, { weekday: false })),
     svg('path', { class: 'chart-area', d: `${path} L${last.x.toFixed(1)} ${box.bottom} L${pts[0].x.toFixed(1)} ${box.bottom} Z` }),
     svg('path', { class: 'chart-line', d: path }),
     cross,

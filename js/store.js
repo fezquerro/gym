@@ -187,10 +187,17 @@ export function liftLog(exerciseId, session) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// The set that stands for a day: the one marked as top set, else the heaviest.
+// A missed attempt is logged as a failed set of 0 reps. It shows in the history but takes
+// no part in records, estimates or top sets.
+export const counts = set => set.reps >= 1;
+
+// The set that stands for a day: the one marked as top set, else the heaviest. Null when
+// the day only has missed attempts.
 export function topSet(day) {
-  const marked = day.sets.filter(set => set.top);
-  return (marked.length ? marked : day.sets).reduce((best, set) =>
+  const lifted = day.sets.filter(counts);
+  if (!lifted.length) return null;
+  const marked = lifted.filter(set => set.top);
+  return (marked.length ? marked : lifted).reduce((best, set) =>
     set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps) ? set : best);
 }
 
@@ -208,7 +215,7 @@ export function estimate1rm(exerciseId, set, bodyweight) {
 export function records(exerciseId, session) {
   let heaviest = null, best1rm = null, mostReps = null;
   for (const { date, sets, bodyweight } of liftLog(exerciseId, session)) {
-    for (const set of sets) {
+    for (const set of sets.filter(counts)) {
       const lift = { ...set, date, e1rm: estimate1rm(exerciseId, set, bodyweight) };
       if (!heaviest || lift.weight > heaviest.weight ||
           (lift.weight === heaviest.weight && lift.reps > heaviest.reps)) heaviest = lift;
@@ -223,7 +230,7 @@ export function records(exerciseId, session) {
 // Does `set` beat the records in `rec` (from earlier sessions)? `estimate` is the set's
 // estimated 1RM. A first-ever set is not a record.
 export function isPR(set, rec, estimate) {
-  if (!rec || !set.done) return false;
+  if (!rec || !set.done || !counts(set)) return false;
   const weight = set.weight ?? 0;
   if (weight > rec.heaviest.weight) return true;
   if (weight > 0) return estimate > rec.best1rm.e1rm + 1e-9;
@@ -231,13 +238,17 @@ export function isPR(set, rec, estimate) {
 }
 
 // The top set of each main lift done in a workout, in MAIN_LIFTS order: [{ exercise, set }].
+// A lift with only missed attempts shows its heaviest attempt instead.
 export const sessionTopSets = session =>
   MAIN_LIFTS
     .map(lift => state.exercises.find(e => e.main === lift.key))
     .filter(Boolean)
     .map(ex => ({ exercise: ex, sets: doneSets(session, ex.id) }))
     .filter(item => item.sets.length)
-    .map(item => ({ exercise: item.exercise, set: topSet(item) }));
+    .map(item => ({
+      exercise: item.exercise,
+      set: topSet(item) ?? item.sets.reduce((best, set) => (set.weight > best.weight ? set : best)),
+    }));
 
 export function sessionStats(session) {
   let sets = 0, volume = 0;
@@ -360,6 +371,42 @@ export function importRecords(rows) {
   }
   state.records.push(...fresh);
   if (fresh.length) db.putMany('records', fresh);
+  return fresh.length;
+}
+
+// ---- Workouts from a file ----
+
+// workouts: from parseWorkouts in import.js. Each becomes a finished workout; unknown
+// exercises are created and a routine is linked when one has the same name. A workout
+// already in the app (same date, exercises and sets) is skipped, so importing the same
+// file twice adds nothing. Returns how many were added.
+export function importWorkouts(workouts) {
+  const signature = session =>
+    `${session.date}|${session.entries.map(e => `${e.exerciseId}:${e.sets.map(s => `${s.weight}x${s.reps}`).join(',')}`).join(';')}`;
+  const known = new Set(chronological().map(signature));
+  const fresh = [];
+  workouts.forEach((workout, i) => {
+    const routine = workout.routine &&
+      state.routines.find(r => r.name.trim().toLowerCase() === workout.routine.toLowerCase());
+    const session = {
+      id: uid(),
+      date: workout.date,
+      startedAt: i,
+      finishedAt: Date.now(),
+      bodyweight: workout.bodyweight,
+      notes: workout.notes,
+      routineId: routine?.id ?? null,
+      entries: workout.entries.map(entry => ({
+        exerciseId: addExercise(entry.exercise).id,
+        sets: entry.sets.map(set => ({ ...set, done: true })),
+      })),
+    };
+    if (known.has(signature(session))) return;
+    known.add(signature(session));
+    fresh.push(session);
+  });
+  state.sessions.push(...fresh);
+  if (fresh.length) db.putMany('sessions', fresh);
   return fresh.length;
 }
 

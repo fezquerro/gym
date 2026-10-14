@@ -34,7 +34,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font: 18px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overscroll-behavior-y: none;
 }
 
@@ -67,7 +67,7 @@ h1, h2, h3, p {
 
 h2 {
   margin-top: 12px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -75,7 +75,7 @@ h2 {
 }
 
 h3 {
-  font-size: 17px;
+  font-size: 19px;
 }
 
 .muted {
@@ -83,7 +83,7 @@ h3 {
 }
 
 .small {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 /* ---- Layout ---- */
@@ -111,7 +111,7 @@ h3 {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -178,7 +178,7 @@ h3 {
 .btn.compact {
   min-height: 36px;
   padding: 0 4px 0 12px;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .choice {
@@ -193,7 +193,7 @@ h3 {
   flex: none;
   width: 20px;
   color: var(--accent);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -239,7 +239,7 @@ tr.chosen td {
   width: 32px;
   height: 40px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 16px;
 }
 
 input,
@@ -337,7 +337,7 @@ input[type="date"] {
 .set.head {
   margin-top: 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-align: center;
   text-transform: uppercase;
@@ -357,7 +357,7 @@ input[type="date"] {
 
 .set .idx small {
   color: var(--accent);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -415,7 +415,7 @@ input[type="date"] {
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -443,7 +443,7 @@ input[type="date"] {
 details.table summary {
   padding: 8px 0 2px;
   color: var(--accent);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -458,22 +458,21 @@ details.table summary {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 
+/* Text in tables may wrap (exercise names, long sets) so the columns fit across a phone
+   screen; numbers with their units are joined with no-break spaces where they are built. */
 th,
 td {
   padding: 7px 0 7px 6px;
   border-bottom: 1px solid var(--line);
   text-align: right;
-  white-space: nowrap;
 }
 
-/* Long column names wrap so four lifts fit across a phone screen. */
 th {
   vertical-align: bottom;
-  white-space: normal;
 }
 
 th:first-child,
@@ -495,7 +494,7 @@ th {
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -528,7 +527,7 @@ th {
 }
 
 .tile strong {
-  font-size: 19px;
+  font-size: 21px;
 }
 
 .bars {
@@ -547,7 +546,7 @@ th {
 }
 
 .bar-label {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -560,16 +559,16 @@ th {
 /* The widest bar stops short of the edge so every value label fits after its bar. */
 .bar-fill {
   flex: none;
-  width: calc((100% - 124px) * var(--share));
+  width: calc((100% - 140px) * var(--share));
   min-width: 2px;
-  height: 16px;
+  height: 22px;
   border-radius: 0 4px 4px 0;
   background: var(--accent);
 }
 
 .bar-value {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -586,7 +585,7 @@ th {
   min-height: 38px;
   border-radius: 9px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -600,7 +599,7 @@ th {
   grid-template-columns: 1fr 1fr;
   gap: 4px 12px;
   margin: 2px 0 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .legend-item {
@@ -684,13 +683,13 @@ th {
 
 .chart-text {
   fill: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .chart-value {
   fill: var(--text);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -703,7 +702,7 @@ th {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-2);
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -737,7 +736,7 @@ th {
   gap: 3px;
   height: var(--tabs-h);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 #tabs button.active {
@@ -804,7 +803,7 @@ th {
   border-radius: 999px;
   background: var(--text);
   color: var(--bg);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   transform: translateX(-50%);
 }

@@ -1,9 +1,9 @@
 import { deliver, fileName, toCSV } from '../export.js';
 import { go, refresh } from '../nav.js';
-import { parseLifts, readText } from '../import.js';
+import { parseLifts, parseWorkouts, readText } from '../import.js';
 import {
   activeExercises, addExercise, backup, chronological, deleteAllRecords, deleteRecord, deleteRoutine,
-  exerciseName, importRecords, isBackup, newRoutine, removeExercise, renameExercise, restore,
+  exerciseName, importRecords, importWorkouts, isBackup, newRoutine, removeExercise, renameExercise, restore,
   routineSets, routineSummary, saveRoutine, state,
 } from '../store.js';
 import {
@@ -323,6 +323,32 @@ function dataPage() {
 
   const liftPicker = h('input', { type: 'file', accept: '.csv,text/csv', hidden: true, onchange: importLifts });
 
+  const importSessions = async event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    let parsed;
+    try {
+      parsed = parseWorkouts(await readText(file));
+    } catch (err) {
+      toast(err.message);
+      return;
+    }
+    const { workouts, skipped } = parsed;
+    if (!workouts.length) {
+      toast('No workouts found in that file');
+      return;
+    }
+    const sets = workouts.reduce((n, w) => n + w.entries.reduce((m, e) => m + e.sets.length, 0), 0);
+    const note = skipped ? ` (${skipped} row${skipped === 1 ? '' : 's'} could not be read)` : '';
+    if (!confirm(`Add ${workouts.length} workout${workouts.length === 1 ? '' : 's'} (${sets} sets) from this file to your history?${note}`)) return;
+    const added = importWorkouts(workouts);
+    toast(`${added} workout${added === 1 ? '' : 's'} added`);
+    refresh();
+  };
+
+  const workoutPicker = h('input', { type: 'file', accept: '.csv,text/csv', hidden: true, onchange: importSessions });
+
   return page('Export & backup', { back: () => go('more') },
     h('p', { class: 'muted' },
       `${count} workout${count === 1 ? '' : 's'} logged. Everything is stored on this device only, so export a backup now and then.`),
@@ -345,6 +371,13 @@ function dataPage() {
         'Add past lifts from a CSV file. It needs a first row with the column names Date, Exercise, Weight and Reps; RPE and Bodyweight columns are optional. Dates can be 2026-10-13 or 13/10/2026. Nothing already in the app is replaced.'),
       h('button', { class: 'btn', onclick: () => liftPicker.click() }, 'Import records (CSV)'),
       liftPicker,
+    ),
+    h('section', { class: 'card' },
+      h('strong', null, 'Import workouts'),
+      h('span', { class: 'muted small' },
+        'Add past workouts to your history from a CSV file with one row per set: Date, Exercise, Weight and Reps, plus optional Set, RPE, Top set, Failed, Planned reps, Bodyweight, Routine and Notes columns. The app\'s own CSV export works too. Workouts already in the app are skipped.'),
+      h('button', { class: 'btn', onclick: () => workoutPicker.click() }, 'Import workouts (CSV)'),
+      workoutPicker,
     ),
   );
 }

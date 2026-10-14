@@ -20,7 +20,7 @@ export function toCSV() {
     const estimate = estimate1rm(exerciseId, set, bodyweight);
     return [
       num(set.weight ?? 0), set.reps, num(set.rpe), set.top ? 'yes' : '',
-      set.failed ? 'yes' : '', set.failed ? set.target ?? '' : '', estimate > 0 ? num(estimate) : '',
+      set.failed ? 'yes' : '', set.failed ? set.target ?? '' : '', set.reps >= 1 && estimate > 0 ? num(estimate) : '',
     ];
   };
 
