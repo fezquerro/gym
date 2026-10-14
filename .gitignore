@@ -1,0 +1,8 @@
+# The repository is published as a public site: keep personal data out of it.
+*.csv
+gym-log-*.json
+
+# Local preview tools and Claude settings, only for this computer.
+preview.bat
+tools/
+.claude/
