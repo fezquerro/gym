@@ -3,7 +3,7 @@
 import { go, refresh } from '../nav.js';
 import {
   addEntry, bodyweightLookup, deleteSession, estimate1rm, exercise, exerciseName, isPR, lastSets,
-  newRoutine, newSet, records, saveSession, state, tidy,
+  newRoutine, newSet, records, routineSets, routineSummary, saveSession, state, tidy,
 } from '../store.js';
 import { fmtDate, fmtNum, fmtSet, fmtSets, h, mount, parseNum, toast, validRpe } from '../util.js';
 import { page } from './common.js';
@@ -30,7 +30,7 @@ export function sessionEditor(session) {
     }
     const prs = session.entries.filter(entry => {
       const rec = records(entry.exerciseId, session);
-      return entry.sets.some(set => isPR(set, rec, estimate(entry, set)));
+      return entry.sets.some(set => isPR(set, rec, exercise(entry.exerciseId)?.main, siblings(entry)));
     }).length;
     tidy(session);
     session.finishedAt = Date.now();
@@ -76,10 +76,32 @@ export function sessionEditor(session) {
 
   // The hint about top sets is only shown until one has been marked for the first time.
   const showTopHint = !state.sessions.some(s => s.entries.some(e => e.sets.some(set => set.top)));
-  const context = { save, estimate, bodyweight };
+  // All sets of the same exercise in this workout: a record mark goes only to the best of them.
+  const siblings = entry => session.entries.filter(e => e.exerciseId === entry.exerciseId).flatMap(e => e.sets);
+  // Every row registers its painter, so a change in one set can move the record mark to another.
+  const painters = [];
+  const context = { save, estimate, bodyweight, siblings, painters };
 
   return page(active ? 'Workout' : fmtDate(session.date), { back: active ? null : leave, action: date },
     session.entries.map((entry, i) => entryCard(session, entry, context, showTopHint && i === 0)),
+
+    // A workout started empty can still be filled from a routine until it has exercises.
+    active && !session.entries.length && state.routines.length > 0 && [
+      h('h2', null, 'Start from a routine'),
+      state.routines.map(routine =>
+        h('button', {
+          class: 'card',
+          onclick: () => {
+            for (const id of routine.exerciseIds) addEntry(session, id, routineSets(routine, id));
+            session.routineId = routine.id;
+            save();
+            refresh();
+          },
+        },
+          h('strong', null, routine.name || 'Untitled routine'),
+          h('span', { class: 'muted small' }, routineSummary(routine) || 'No exercises yet'),
+        )),
+    ],
 
     h('button', {
       class: 'btn',
@@ -137,6 +159,15 @@ function entryCard(session, entry, context, showTopHint) {
     entry.sets.slice(0, i).reverse().find(set => set.reps != null) ??
     null;
 
+  // Swaps this exercise with the one above (-1) or below (+1).
+  const position = session.entries.indexOf(entry);
+  const move = step => {
+    const entries = session.entries;
+    [entries[position], entries[position + step]] = [entries[position + step], entries[position]];
+    save();
+    refresh();
+  };
+
   const remove = () => {
     if (entry.sets.some(set => set.reps != null) && !confirm(`Remove ${name} from this workout?`)) return;
     session.entries.splice(session.entries.indexOf(entry), 1);
@@ -147,7 +178,11 @@ function entryCard(session, entry, context, showTopHint) {
   return h('section', { class: 'card' },
     h('div', { class: 'row' },
       h('h3', null, name),
-      h('button', { class: 'icon', 'aria-label': `Remove ${name}`, onclick: remove }, '✕'),
+      h('div', { class: 'actions' },
+        h('button', { class: 'icon', 'aria-label': `Move ${name} up`, disabled: position === 0, onclick: () => move(-1) }, '↑'),
+        h('button', { class: 'icon', 'aria-label': `Move ${name} down`, disabled: position === session.entries.length - 1, onclick: () => move(1) }, '↓'),
+        h('button', { class: 'icon', 'aria-label': `Remove ${name}`, onclick: remove }, '✕'),
+      ),
     ),
     last && h('p', { class: 'muted small' },
       `Last time (${fmtDate(last.date, { weekday: false })}): ${fmtSets(last.sets)}`),
@@ -181,7 +216,7 @@ function estimateLine(main, set, value, bodyweight) {
   ];
 }
 
-function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
+function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight, siblings, painters }) {
   const main = exercise(entry.exerciseId)?.main;
   const expected = hint(i);
   const field = (label, mode, value, placeholder) => h('input', {
@@ -241,9 +276,10 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
   const missed = h('label', { class: 'estimate missed small', hidden: true }, 'Failed · aimed for', target, 'reps');
 
   // Rows update in place so typing never loses focus.
+  const repaint = () => painters.forEach(draw => draw());
   const paint = () => {
     const value = estimate(entry, set);
-    const pr = isPR(set, rec, value);
+    const pr = isPR(set, rec, main, siblings(entry));
     row.classList.toggle('done', set.done);
     row.classList.toggle('skipped', !set.done && set.reps != null);
     row.classList.toggle('top', !!set.top);
@@ -267,13 +303,13 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
     set.rpe = validRpe(n) ? n : null;
     // "1" is left alone because it is how typing "10" starts.
     rpe.classList.toggle('invalid', !['', '1'].includes(rpe.value.trim()) && !validRpe(n));
-    paint();
+    repaint();
     save();
   });
 
   weight.addEventListener('input', () => {
     set.weight = parseNum(weight.value);
-    paint();
+    repaint();
     save();
   });
 
@@ -296,7 +332,7 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
       set.weight = from.weight;
       weight.value = fmtNum(set.weight);
     }
-    paint();
+    repaint();
     save();
   });
 
@@ -324,10 +360,11 @@ function setRow(entry, set, i, { hint, rec, save, estimate, bodyweight }) {
       set.done = true;
       if (set.reps === 0) set.failed = true;
     }
-    paint();
+    repaint();
     save();
   });
 
+  painters.push(paint);
   paint();
   return [row, missed, estimated];
 }

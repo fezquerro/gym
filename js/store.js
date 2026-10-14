@@ -211,12 +211,15 @@ export function estimate1rm(exerciseId, set, bodyweight) {
   return oneRepMax(bodyweight + weight, set.reps, set.rpe, { lift }) - bodyweight;
 }
 
-// Best lifts for one exercise: heaviest weight, best estimated 1RM and most reps in a set.
+// Best lifts for one exercise: heaviest weight, best estimated 1RM and most reps in a set,
+// plus every lift made (`lifts`), for the per-rep records of the main lifts.
 export function records(exerciseId, session) {
   let heaviest = null, best1rm = null, mostReps = null;
+  const lifts = [];
   for (const { date, sets, bodyweight } of liftLog(exerciseId, session)) {
     for (const set of sets.filter(counts)) {
       const lift = { ...set, date, e1rm: estimate1rm(exerciseId, set, bodyweight) };
+      lifts.push(lift);
       if (!heaviest || lift.weight > heaviest.weight ||
           (lift.weight === heaviest.weight && lift.reps > heaviest.reps)) heaviest = lift;
       if (!best1rm || lift.e1rm > best1rm.e1rm) best1rm = lift;
@@ -224,17 +227,35 @@ export function records(exerciseId, session) {
           (lift.reps === mostReps.reps && lift.weight > mostReps.weight)) mostReps = lift;
     }
   }
-  return heaviest && { heaviest, best1rm, mostReps };
+  return heaviest && { heaviest, best1rm, mostReps, lifts };
 }
 
-// Does `set` beat the records in `rec` (from earlier sessions)? `estimate` is the set's
-// estimated 1RM. A first-ever set is not a record.
-export function isPR(set, rec, estimate) {
+// Is `set` a record? Only what was lifted counts, never the estimated 1RM. `rec` holds the
+// earlier sessions; `siblings` are all sets of the same exercise in this workout, so only
+// the best of them gets the mark, wherever it sits (on a tie, the first one).
+// For a main lift (`main` is its key) every rep count has its own record: the set is one
+// unless another set was at least as heavy for at least as many reps. Other exercises only
+// count a new heaviest weight (or, without added weight, most reps). A first-ever set is
+// not a record.
+export function isPR(set, rec, main, siblings = [set]) {
   if (!rec || !set.done || !counts(set)) return false;
   const weight = set.weight ?? 0;
-  if (weight > rec.heaviest.weight) return true;
-  if (weight > 0) return estimate > rec.best1rm.e1rm + 1e-9;
-  return rec.heaviest.weight === 0 && set.reps > rec.mostReps.reps;
+  const at = siblings.indexOf(set);
+  const others = siblings
+    .map((other, i) => ({ weight: other.weight ?? 0, reps: other.reps, earlier: i < at, ok: other.done && counts(other) }))
+    .filter((other, i) => i !== at && other.ok);
+
+  if (weight > 0 && main) {
+    const beaten = other => other.weight >= weight && other.reps >= set.reps;
+    const sameSet = other => other.weight === weight && other.reps === set.reps;
+    return !rec.lifts.some(beaten) && !others.some(other => beaten(other) && (!sameSet(other) || other.earlier));
+  }
+  if (weight > 0) {
+    return weight > rec.heaviest.weight &&
+      !others.some(other => other.weight > weight || (other.weight === weight && other.earlier));
+  }
+  return rec.heaviest.weight === 0 && set.reps > rec.mostReps.reps &&
+    !others.some(other => other.weight === 0 && (other.reps > set.reps || (other.reps === set.reps && other.earlier)));
 }
 
 // The top set of each main lift done in a workout, in MAIN_LIFTS order: [{ exercise, set }].
