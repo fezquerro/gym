@@ -1,6 +1,6 @@
 // The workout editor, used both for the workout in progress and for editing past ones.
 
-import { go, refresh } from '../nav.js';
+import { go, refresh, setLeaveCheck } from '../nav.js';
 import {
   addEntry, bodyweightLookup, deleteSession, estimate1rm, exercise, exerciseName, isPR, lastSets,
   newRoutine, newSet, records, routineSets, routineSummary, saveSession, state, tidy,
@@ -11,9 +11,31 @@ import { pickExercise } from './picker.js';
 
 const kg = n => `${fmtNum(Math.round(n * 10) / 10)} kg`;
 
-export function sessionEditor(session) {
-  const active = !session.finishedAt;
-  const save = () => saveSession(session);
+// Past workouts are edited on a copy that only replaces the saved workout when "Save
+// changes" is tapped. The copy outlives redraws while its screen stays open.
+const drafts = new Map();
+
+export function sessionEditor(original) {
+  const active = !original.finishedAt;
+  if (!active && !drafts.has(original.id)) drafts.set(original.id, JSON.parse(JSON.stringify(original)));
+  const session = active ? original : drafts.get(original.id);
+  // The workout in progress saves as you type; a past one waits for confirmation.
+  const save = () => {
+    if (active) saveSession(session);
+  };
+  const changed = () => !active && JSON.stringify(session) !== JSON.stringify(original);
+  const closeDraft = () => {
+    drafts.delete(original.id);
+    setLeaveCheck(null);
+  };
+  // Leaving a past workout with unsaved changes (back, another tab...) asks first.
+  if (!active) {
+    setLeaveCheck(() => {
+      if (changed() && !confirm('Leave without saving your changes to this workout?')) return false;
+      drafts.delete(original.id);
+      return true;
+    });
+  }
 
   // Bodyweight is typed at the end of the workout, so until then the last known one is used.
   const knownWeight = bodyweightLookup()(session.date);
@@ -41,17 +63,31 @@ export function sessionEditor(session) {
 
   const discard = () => {
     if (!confirm(active ? 'Discard this workout?' : 'Delete this workout? This cannot be undone.')) return;
-    deleteSession(session);
-    active ? refresh() : go('history');
+    deleteSession(original);
+    if (active) return refresh();
+    closeDraft();
+    go('history');
   };
 
-  const leave = () => {
-    if (tidy(session)) {
-      save();
-    } else {
-      deleteSession(session);
-      toast('Empty workout removed');
+  // Puts the edited copy in place of the saved workout.
+  const saveChanges = () => {
+    if (!changed()) {
+      closeDraft();
+      go('history');
+      return;
     }
+    if (!tidy(session)) {
+      if (!confirm('No sets are left in this workout. Delete it?')) return;
+      deleteSession(original);
+      closeDraft();
+      toast('Workout deleted');
+      go('history');
+      return;
+    }
+    Object.assign(original, session);
+    saveSession(original);
+    closeDraft();
+    toast('Changes saved');
     go('history');
   };
 
@@ -82,7 +118,7 @@ export function sessionEditor(session) {
   const painters = [];
   const context = { save, estimate, bodyweight, siblings, painters };
 
-  return page(active ? 'Workout' : fmtDate(session.date), { back: active ? null : leave, action: date },
+  return page(active ? 'Workout' : fmtDate(session.date), { back: active ? null : () => go('history'), action: date },
     session.entries.map((entry, i) => entryCard(session, entry, context, showTopHint && i === 0)),
 
     // A workout started empty can still be filled from a routine until it has exercises.
@@ -142,7 +178,10 @@ export function sessionEditor(session) {
 
     active
       ? h('button', { class: 'btn primary', onclick: finish }, 'Finish workout')
-      : h('button', { class: 'btn', onclick: saveAsRoutine }, 'Save as routine'),
+      : [
+          h('button', { class: 'btn primary', onclick: saveChanges }, 'Save changes'),
+          h('button', { class: 'btn', onclick: saveAsRoutine }, 'Save as routine'),
+        ],
     h('button', { class: 'btn danger', onclick: discard }, active ? 'Discard workout' : 'Delete workout'),
   );
 }

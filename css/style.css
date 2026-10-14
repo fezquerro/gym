@@ -26,7 +26,12 @@
   display: none !important;
 }
 
+/* On iPhone, an app opened from the home screen with a see-through status bar gets a
+   viewport shorter than the screen while the page is shorter than the screen, which leaves
+   the fixed tab bar floating above the bottom. Making the page at least a screen tall plus
+   the status bar keeps the viewport full height. */
 html {
+  min-height: calc(100% + env(safe-area-inset-top));
   -webkit-text-size-adjust: 100%;
 }
 
