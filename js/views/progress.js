@@ -5,7 +5,7 @@ import {
   records, state, topSet,
 } from '../store.js';
 import { fmtDate, fmtNum, fmtSet, fmtSets, h, isoDate, parseNum, toast, todayISO, validRpe } from '../util.js';
-import { dataTable, page } from './common.js';
+import { bodyweightCell, dataTable, page } from './common.js';
 import { pickExercise } from './picker.js';
 
 const round1 = n => Math.round(n * 10) / 10;
@@ -13,6 +13,12 @@ const kg = n => `${fmtNum(round1(n))} kg`;
 const day = iso => fmtDate(iso, { weekday: false });
 // Dates in tables are numeric (13/10/25) so the columns fit across a phone screen.
 const tableDay = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`;
+
+// The bodyweight logged on each date (a workout weigh-in or a record added by hand), else null.
+const weighIns = () => {
+  const known = new Map(bodyweights().map(p => [p.date, p.value]));
+  return date => known.get(date) ?? null;
+};
 
 // The log without missed attempts (failed sets of 0 reps), which have no weight lifted to
 // chart; days that only had missed attempts drop out.
@@ -90,6 +96,7 @@ let repsFilter = null;
 const hiddenLifts = new Set();
 
 function mainLiftsCard(from) {
+  const bodyweight = weighIns();
   const lifts = MAIN_LIFTS.map((main, i) => {
     const ex = state.exercises.find(e => e.main === main.key);
     return { main, ex, color: `var(--series-${i + 1})`, log: ex ? lifted(liftLog(ex.id)) : [] };
@@ -144,7 +151,7 @@ function mainLiftsCard(from) {
     .sort((a, b) => b.point.value - a.point.value || b.point.date.localeCompare(a.point.date))
     .map(({ s, point }) => [
       s.name,
-      `${s.prefix}${fmtNum(point.value)} kg`,
+      bodyweightCell(`${s.prefix}${fmtNum(point.value)} kg`, bodyweight(point.date)),
       // With the estimate, also the set it came from: the weight and reps actually lifted.
       repsFilter == null && point.lifted,
       tableDay(point.date),
@@ -165,7 +172,7 @@ function mainLiftsCard(from) {
         : `Heaviest set of exactly ${repsFilter} rep${repsFilter === 1 ? '' : 's'} each day.`) +
       ' Pull-ups show the weight added to your bodyweight.'),
     rows.length
-      ? [trendChart(shown), dataTable(headers, rows)]
+      ? [trendChart(shown, { bodyweight }), dataTable(headers, rows)]
       : h('p', { class: 'muted small' },
           shown.length ? 'Nothing logged for these lifts in this time span.' : 'Turn on at least one lift above.'),
   );
@@ -212,6 +219,7 @@ function exerciseDetail(id) {
   const weighted = rec.heaviest.weight > 0;
   const pullup = exercise(id)?.main === 'pullup';
   const measure = set => (weighted ? set.weight : set.reps);
+  const bodyweight = weighIns();
 
   // One point per day: its top set, flagged when it beat every earlier top set.
   let best = -Infinity;
@@ -250,7 +258,7 @@ function exerciseDetail(id) {
 
     h('section', { class: 'card' },
       h('h3', null, weighted ? 'Top set per session' : 'Top set reps per session'),
-      lineChart(tops, { unit: weighted ? 'kg' : 'reps', even: true }),
+      lineChart(tops, { unit: weighted ? 'kg' : 'reps', even: true, bodyweight }),
       tops.length > 1 && h('p', { class: 'muted small key' }, h('span', { class: 'key-dot' }), 'New record'),
       dataTable(
         ['Date', 'Top set', 'Est. 1RM'],
@@ -262,7 +270,7 @@ function exerciseDetail(id) {
             b.entry.date.localeCompare(a.entry.date))
           .map(({ entry, top }) => {
             const value = round1(Math.max(...entry.sets.map(set => estimate1rm(id, set, entry.bodyweight))));
-            return [tableDay(entry.date), top.label + (top.record ? ' ★' : ''), value > 0 ? `${pullup ? '+' : ''}${fmtNum(value)}` : ''];
+            return [tableDay(entry.date), bodyweightCell(top.label + (top.record ? ' ★' : ''), bodyweight(entry.date)), value > 0 ? `${pullup ? '+' : ''}${fmtNum(value)}` : ''];
           }),
       ),
     ),
@@ -270,7 +278,7 @@ function exerciseDetail(id) {
     estimates.length > 0 && h('section', { class: 'card' },
       h('h3', null, 'Estimated 1RM per session'),
       pullup && h('p', { class: 'muted small' }, 'Weight added to your bodyweight.'),
-      lineChart(estimates, { even: true }),
+      lineChart(estimates, { even: true, bodyweight }),
     ),
 
     add,

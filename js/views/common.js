@@ -1,4 +1,4 @@
-import { h } from '../util.js';
+import { fmtNum, h } from '../util.js';
 
 // A fold-out table with the same numbers as the chart above it. rows: arrays of cell text.
 export function dataTable(headers, rows) {
@@ -11,6 +11,16 @@ export function dataTable(headers, rows) {
       ),
     ),
   );
+}
+
+// A table cell that shows the bodyweight of that day when tapped, if one was logged.
+export function bodyweightCell(text, bodyweight) {
+  if (bodyweight == null) return text;
+  const extra = h('span', { class: 'cell-extra', hidden: true }, `BW ${fmtNum(bodyweight)} kg`);
+  return h('button', {
+    class: 'cell-tap',
+    onclick: () => { extra.hidden = !extra.hidden; },
+  }, h('span', { class: 'cell-value' }, text), extra);
 }
 
 // Standard screen layout: a title bar (with optional back button and right-side action) over content.

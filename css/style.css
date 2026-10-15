@@ -480,6 +480,32 @@ th {
   vertical-align: bottom;
 }
 
+/* A value that shows the day's bodyweight under it when tapped. */
+.cell-tap {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.cell-value {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+}
+
+.cell-extra {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.cell-extra[hidden] {
+  display: none;
+}
+
 th:first-child,
 td:first-child {
   padding-left: 0;
@@ -708,8 +734,13 @@ th {
   border-radius: 8px;
   background: var(--surface-2);
   font-size: 14px;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  max-width: 100%;
   pointer-events: none;
+}
+
+.chart-tip > * {
+  white-space: nowrap;
 }
 
 .chart-tip span {

@@ -52,13 +52,17 @@ export function barList(items) {
 // each series' latest value, or its value up to the date under the pointer.
 // series: [{ name, color, prefix?, points: [{ date, value }] }], points oldest first.
 // `prefix` goes in front of that series' values in the readout (e.g. "+").
-export function trendChart(series, { unit = 'kg' } = {}) {
+// `bodyweight(date)` gives the bodyweight logged that day, if any, added to the readout.
+export function trendChart(series, { unit = 'kg', bodyweight = () => null } = {}) {
   const all = series.flatMap(s => s.points);
   const when = h('p', { class: 'muted small' });
   const legend = h('div', { class: 'legend' });
 
   const readout = date => {
-    when.textContent = date ? `Up to ${fmtDate(date)}` : 'Latest';
+    const weighIn = date ? bodyweight(date) : null;
+    when.textContent = date
+      ? `Up to ${fmtDate(date)}${weighIn != null ? ` · bodyweight ${fmtNum(weighIn)} kg` : ''}`
+      : 'Latest';
     mount(legend, series.map(s => {
       const point = date ? s.points.filter(p => p.date <= date).at(-1) : s.points.at(-1);
       return h('span', { class: 'legend-item' },
@@ -141,7 +145,8 @@ export function trendChart(series, { unit = 'kg' } = {}) {
 // `label` replaces the value in the readout. When points carry `record`, a dot is drawn
 // on each record-setting point instead of on the latest one.
 // `even` spaces the points equally (one step per session) instead of by calendar date.
-export function lineChart(points, { unit = 'kg', even = false } = {}) {
+// `bodyweight(date)` gives the bodyweight logged that day, if any, added to the readout.
+export function lineChart(points, { unit = 'kg', even = false, bodyweight = () => null } = {}) {
   if (points.length < 2) {
     return h('p', { class: 'muted small' }, 'The chart appears once there are two sessions to compare.');
   }
@@ -193,7 +198,11 @@ export function lineChart(points, { unit = 'kg', even = false } = {}) {
     marker.setAttribute('cx', p.x);
     marker.setAttribute('cy', p.y);
     marker.setAttribute('visibility', 'visible');
-    mount(tip, h('strong', null, p.label ?? `${fmtNum(p.value)} ${unit}`), h('span', null, fmtDate(p.date)));
+    const weighIn = bodyweight(p.date);
+    mount(tip,
+      h('strong', null, p.label ?? `${fmtNum(p.value)} ${unit}`),
+      h('span', null, fmtDate(p.date)),
+      weighIn != null && h('span', null, `BW ${fmtNum(weighIn)} kg`));
     tip.hidden = false;
     const percent = (p.x / W) * 100;
     tip.style.left = `${percent}%`;
