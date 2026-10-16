@@ -112,6 +112,18 @@ h3 {
   min-height: 48px;
 }
 
+/* Screens with a back button keep their title bar at the top while scrolling. It reaches
+   up under the status bar and out to the screen edges so content doesn't show around it. */
+.bar.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: calc(-8px - env(safe-area-inset-top)) -16px 0;
+  padding: calc(8px + env(safe-area-inset-top)) 16px 4px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
 .bar h1 {
   flex: 1;
   min-width: 0;

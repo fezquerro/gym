@@ -24,9 +24,10 @@ export function bodyweightCell(text, bodyweight) {
 }
 
 // Standard screen layout: a title bar (with optional back button and right-side action) over content.
+// With a back button the bar stays at the top while scrolling.
 export function page(title, { back, action } = {}, ...children) {
   return h('div', { class: 'page' },
-    h('header', { class: 'bar' },
+    h('header', { class: back ? 'bar sticky' : 'bar' },
       back && h('button', { class: 'back', 'aria-label': 'Back', onclick: back }, '‹'),
       h('h1', null, title),
       action,
