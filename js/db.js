@@ -1,8 +1,8 @@
 // Thin promise wrapper over IndexedDB. Every store holds whole documents keyed by `id`.
 
 const DB_NAME = 'gym-log';
-const DB_VERSION = 2;
-export const STORES = ['exercises', 'routines', 'sessions', 'records'];
+const DB_VERSION = 3;
+export const STORES = ['exercises', 'routines', 'sessions', 'records', 'weighins'];
 
 let opening;
 

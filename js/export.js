@@ -3,7 +3,10 @@
 import { bodyweightLookup, chronological, estimate1rm, exerciseName, routineName, state } from './store.js';
 import { fmtNum, todayISO } from './util.js';
 
-// One row per completed set, plus one per record added by hand. Follows the device's
+// Note on the rows for bodyweight logged without a lift; the importers skip them.
+export const BODYWEIGHT_ONLY = 'Bodyweight only';
+
+// One row per completed set, plus one per record added by hand and per bodyweight logged on its own. Follows the device's
 // number format so Excel opens it correctly: regions that write decimals with a comma
 // get ";" as the column separator.
 export function toCSV() {
@@ -44,6 +47,9 @@ export function toCSV() {
       ...lift(record.exerciseId, record, record.bodyweight ?? weighIn(record.date)),
       num(record.bodyweight), '', 'Record added by hand',
     ]);
+  }
+  for (const weighIn of state.weighins) {
+    rows.push([weighIn.date, '', '', '', '', '', '', '', '', '', num(weighIn.value), '', BODYWEIGHT_ONLY]);
   }
   rows.sort((a, b) => a[0].localeCompare(b[0]));
   rows.unshift([

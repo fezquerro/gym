@@ -1,6 +1,6 @@
-import { go } from '../nav.js';
+import { go, refresh } from '../nav.js';
 import { chronological, exerciseName, routineName, sessionStats, sessionTopSets, state } from '../store.js';
-import { fmtDate, fmtNum, fmtSet, h, mount } from '../util.js';
+import { fmtDate, fmtNum, fmtSet, h, isoDate, mount, todayISO } from '../util.js';
 import { page } from './common.js';
 import { sessionEditor } from './session.js';
 
@@ -26,12 +26,25 @@ export function historyView(route) {
     mount(list,
       words.length > 0 && h('p', { class: 'muted small' },
         `${found.length} of ${sessions.length} workout${sessions.length === 1 ? '' : 's'}`),
-      found.length ? found.map(sessionCard) : h('p', { class: 'muted' }, 'No workouts match that search.'),
+      mode === 'calendar'
+        ? calendar(found, draw)
+        : found.length ? found.map(sessionCard) : h('p', { class: 'muted' }, 'No workouts match that search.'),
     );
   };
   draw();
 
+  const modeButton = (key, label) => h('button', {
+    class: key === mode ? 'on' : '',
+    'aria-pressed': String(key === mode),
+    onclick: () => {
+      mode = key;
+      refresh();
+    },
+  }, label);
+
   return page('History', {},
+    h('div', { class: 'segmented', role: 'group', 'aria-label': 'Show workouts as' },
+      modeButton('list', 'List'), modeButton('calendar', 'Calendar')),
     h('input', {
       type: 'search',
       value: query,
@@ -40,6 +53,8 @@ export function historyView(route) {
       'aria-label': 'Search workouts',
       oninput: e => {
         query = e.target.value;
+        // The calendar jumps to the newest workout the search finds.
+        month = picked = null;
         draw();
       },
     }),
@@ -47,8 +62,69 @@ export function historyView(route) {
   );
 }
 
-// What was typed in the search box; kept while the app stays open.
+// What was typed in the search box, the list or calendar view, the month shown ('YYYY-MM')
+// and the day picked on it; kept while the app stays open.
 let query = '';
+let mode = 'list';
+let month = null;
+let picked = null;
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+// A month grid where the days with a workout (among those the search found) are marked.
+// Tapping one lists its workouts under the grid.
+function calendar(found, redraw) {
+  month ??= (found[0]?.date ?? todayISO()).slice(0, 7);
+  const [y, m] = month.split('-').map(Number);
+  const byDate = new Map();
+  for (const s of found) byDate.set(s.date, [...(byDate.get(s.date) ?? []), s]);
+  const inMonth = found.filter(s => s.date.startsWith(month));
+
+  const shift = step => () => {
+    month = isoDate(new Date(y, m - 1 + step, 1)).slice(0, 7);
+    picked = null;
+    redraw();
+  };
+  const days = new Date(y, m, 0).getDate();
+  const blanks = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday first
+  const today = todayISO();
+
+  const cells = Array.from({ length: days }, (_, i) => {
+    const date = `${month}-${String(i + 1).padStart(2, '0')}`;
+    const count = byDate.get(date)?.length ?? 0;
+    return h('button', {
+      class: ['cal-day', count && 'has', date === picked && 'on', date === today && 'today'].filter(Boolean).join(' '),
+      disabled: !count,
+      'aria-label': `${fmtDate(date)}${count ? `, ${count} workout${count === 1 ? '' : 's'}` : ''}`,
+      onclick: () => {
+        picked = picked === date ? null : date;
+        redraw();
+      },
+    }, String(i + 1));
+  });
+
+  const title = new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const shown = picked?.startsWith(month) ? byDate.get(picked) ?? [] : [];
+  return [
+    h('section', { class: 'card calendar' },
+      h('div', { class: 'row' },
+        h('button', { class: 'cal-nav', 'aria-label': 'Previous month', onclick: shift(-1) }, '‹'),
+        h('strong', null, title),
+        h('button', { class: 'cal-nav', 'aria-label': 'Next month', onclick: shift(1) }, '›'),
+      ),
+      h('div', { class: 'cal-grid' },
+        WEEKDAYS.map(d => h('span', { class: 'cal-head' }, d.slice(0, 1))),
+        Array.from({ length: blanks }, () => h('span')),
+        cells,
+      ),
+      h('p', { class: 'muted small' },
+        inMonth.length
+          ? `${inMonth.length} workout${inMonth.length === 1 ? '' : 's'} this month · tap a day to see it`
+          : 'No workouts this month.'),
+    ),
+    shown.map(sessionCard),
+  ];
+}
 
 // Lower case without accents, so "miercoles" finds "miércoles".
 const normalize = text => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

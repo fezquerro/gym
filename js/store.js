@@ -4,7 +4,7 @@
 import * as db from './db.js';
 import { oneRepMax, todayISO, uid } from './util.js';
 
-export const state = { exercises: [], routines: [], sessions: [], records: [] };
+export const state = { exercises: [], routines: [], sessions: [], records: [], weighins: [] };
 
 const STARTER_EXERCISES = [
   'Bench Press', 'Incline Dumbbell Press', 'Overhead Press', 'Lateral Raise', 'Triceps Pushdown', 'Dip',
@@ -283,12 +283,15 @@ export function sessionStats(session) {
   return { sets, volume };
 }
 
-// Every known bodyweight, oldest first, one per day: from workouts, and from records
-// added by hand on days without a workout weigh-in.
+// Every known bodyweight, oldest first, one per day: from workouts, then bodyweight logged
+// on its own, then records added by hand, each only on days the ones before don't cover.
 export function bodyweights() {
   const byDate = new Map();
   for (const session of chronological()) {
     if (session.bodyweight != null) byDate.set(session.date, session.bodyweight);
+  }
+  for (const weighIn of state.weighins) {
+    if (!byDate.has(weighIn.date)) byDate.set(weighIn.date, weighIn.value);
   }
   for (const record of state.records) {
     if (record.bodyweight != null && !byDate.has(record.date)) byDate.set(record.date, record.bodyweight);
@@ -395,6 +398,32 @@ export function importRecords(rows) {
   return fresh.length;
 }
 
+// ---- Bodyweight logged on its own ----
+// weighIn: { id, date, value }, at most one per date.
+
+// Logs the bodyweight of a day. A finished workout on that date takes it as its own
+// weigh-in instead, so a day never has two. Returns 'workout' or 'weighin'.
+export function logBodyweight(date, value) {
+  const workouts = state.sessions.filter(s => s.finishedAt && s.date === date);
+  if (workouts.length) {
+    for (const session of workouts) {
+      session.bodyweight = value;
+      saveSession(session);
+    }
+    return 'workout';
+  }
+  const weighIn = state.weighins.find(w => w.date === date) ?? { id: uid(), date };
+  weighIn.value = value;
+  if (!state.weighins.includes(weighIn)) state.weighins.push(weighIn);
+  db.put('weighins', weighIn);
+  return 'weighin';
+}
+
+export function deleteWeighIn(weighIn) {
+  state.weighins = state.weighins.filter(w => w !== weighIn);
+  db.del('weighins', weighIn.id);
+}
+
 // ---- Workouts from a file ----
 
 // workouts: from parseWorkouts in import.js. Each becomes a finished workout; unknown
@@ -435,7 +464,7 @@ export function importWorkouts(workouts) {
 
 export const backup = () => ({
   app: 'gym-log',
-  version: 2,
+  version: 3,
   exportedAt: new Date().toISOString(),
   ...state,
 });

@@ -1,5 +1,6 @@
 // Reads past lifts from a CSV file so they can be added as records.
 
+import { BODYWEIGHT_ONLY } from './export.js';
 import { parseNum, validRpe } from './util.js';
 
 const COLUMNS = {
@@ -125,6 +126,7 @@ export function parseLifts(text) {
   let skipped = 0;
   for (const row of rows) {
     const lift = read(row);
+    if (lift.notes === BODYWEIGHT_ONLY) continue;
     // Records are lifts that were made, so missed attempts are left out here.
     if (!valid(lift) || lift.reps < 1) {
       skipped += 1;
@@ -145,8 +147,8 @@ export function parseWorkouts(text) {
   let skipped = 0;
   for (const row of rows) {
     const lift = read(row);
-    // Records added by hand also appear in the export; they are not workout sets.
-    if (lift.notes === 'Record added by hand') continue;
+    // Records added by hand and bodyweight-only rows also appear in the export; they are not workout sets.
+    if (lift.notes === 'Record added by hand' || lift.notes === BODYWEIGHT_ONLY) continue;
     if (!valid(lift)) {
       skipped += 1;
       continue;

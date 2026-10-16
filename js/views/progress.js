@@ -1,8 +1,8 @@
 import { barList, lineChart, trendChart } from '../chart.js';
 import { go, refresh } from '../nav.js';
 import {
-  MAIN_LIFTS, addRecord, counts, bodyweights, deleteRecord, estimate1rm, exercise, exerciseName, liftLog,
-  records, state, topSet,
+  MAIN_LIFTS, addRecord, counts, bodyweights, deleteRecord, deleteWeighIn, estimate1rm, exercise, exerciseName,
+  liftLog, logBodyweight, records, state, topSet,
 } from '../store.js';
 import { fmtDate, fmtNum, fmtSet, fmtSets, h, isoDate, parseNum, toast, todayISO, validRpe } from '../util.js';
 import { bodyweightCell, dataTable, page } from './common.js';
@@ -44,6 +44,7 @@ function rangeStart() {
 export function progressView(route) {
   if (route.page === 'exercise') return exerciseDetail(route.params.id);
   if (route.page === 'add') return addRecordPage(route.params.exerciseId);
+  if (route.page === 'bodyweight') return bodyweightPage();
 
   const open = ex => () => go('progress', 'exercise', { id: ex.id });
   const tracked = state.exercises
@@ -180,10 +181,12 @@ function mainLiftsCard(from) {
 
 function bodyweightCard(from) {
   const points = bodyweights().filter(p => p.date >= from);
+  const log = h('button', { class: 'btn compact', onclick: () => go('progress', 'bodyweight') }, '+ Log bodyweight');
   if (!points.length) {
     return h('section', { class: 'card' },
       h('h3', null, 'Bodyweight'),
-      h('p', { class: 'muted small' }, 'No bodyweight logged in this time span.'));
+      h('p', { class: 'muted small' }, 'No bodyweight logged in this time span.'),
+      log);
   }
   const first = points[0], latest = points.at(-1);
   const change = round1(latest.value - first.value);
@@ -202,6 +205,46 @@ function bodyweightCard(from) {
         diff == null ? '' : diff === 0 ? '0' : `${diff > 0 ? '+' : '−'}${fmtNum(Math.abs(diff))}`,
       ];
     }).reverse()),
+    log,
+  );
+}
+
+// Bodyweight on a day without a workout or a lift, plus the list of those weigh-ins.
+function bodyweightPage() {
+  const back = () => go('progress');
+  const date = h('input', { type: 'date', value: todayISO(), max: todayISO(), 'aria-label': 'Date' });
+  const value = h('input', { class: 'num', inputMode: 'decimal', autocomplete: 'off', 'aria-label': 'Bodyweight' });
+
+  const save = () => {
+    const kilos = parseNum(value.value);
+    if (!date.value) return toast('Choose a date');
+    if (!(kilos > 0)) return toast('Enter your bodyweight');
+    const where = logBodyweight(date.value, kilos);
+    toast(where === 'workout' ? 'Saved to that day\'s workout' : 'Bodyweight saved');
+    value.value = '';
+    refresh();
+  };
+
+  const own = [...state.weighins].sort((a, b) => b.date.localeCompare(a.date));
+  return page('Log bodyweight', { back },
+    h('label', { class: 'card field' }, h('span', null, 'Date'), date),
+    h('label', { class: 'card field' }, h('span', null, 'Bodyweight'), value, h('span', null, 'kg')),
+    h('p', { class: 'muted small' },
+      'Logging it again for the same day replaces it. On a day with a workout, it goes into that workout.'),
+    h('button', { class: 'btn primary', onclick: save }, 'Save bodyweight'),
+    own.length > 0 && h('h2', null, 'Logged on its own'),
+    own.map(weighIn =>
+      h('div', { class: 'card row' },
+        h('span', null, h('strong', null, kg(weighIn.value)), ' ', h('span', { class: 'muted small' }, fmtDate(weighIn.date))),
+        h('button', {
+          class: 'btn danger compact',
+          onclick: () => {
+            if (!confirm(`Delete the bodyweight of ${fmtDate(weighIn.date)}?`)) return;
+            deleteWeighIn(weighIn);
+            refresh();
+          },
+        }, 'Delete'),
+      )),
   );
 }
 
